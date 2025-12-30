@@ -14,6 +14,34 @@ UYGULAMA_SIFRESI = "1234"
 
 st.set_page_config(page_title=UYGULAMA_ADI, page_icon="🦅", layout="centered")
 
+# Google Drive'dan dosya listesini çeken fonksiyon
+@st.cache_data(ttl=600)
+def get_drive_files(folder_id):
+    url = f"https://www.googleapis.com/drive/v3/files?q='{folder_id}'+in+parents&fields=files(id, name)&key={API_KEY}"
+    response = requests.get(url)
+    return response.json().get('files', [])
+
+# Tasarım
+st.markdown("<style>.stApp {background-color: #000; color: #fff;}</style>", unsafe_allow_html=True)
+st.title(UYGULAMA_ADI)
+
+# Verileri Çek
+files = get_drive_files(MUZIK_FOLDER_ID)
+
+if files:
+    selected_file = st.selectbox("Bir şarkı seçin:", files, format_func=lambda x: x['name'])
+    
+    if selected_file:
+        # HIZLI YÖNTEM: Doğrudan Link Oluşturma
+        # Bu link tarayıcının dosyayı doğrudan çekmesini sağlar
+        file_id = selected_file['id']
+        direct_link = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={API_KEY}"
+        
+        st.subheader(f"Şu an çalıyor: {selected_file['name']}")
+        st.audio(direct_link) # Base64 kullanmadan direkt link ile oynatır
+else:
+    st.warning("Klasörde dosya bulunamadı veya API hatası.")
+
 # --- 2. CSS TASARIMI (Parantez hataları düzeltildi) ---
 st.markdown(f"""
 <style>
