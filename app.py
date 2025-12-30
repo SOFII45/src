@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import random
 import time
-import base64
 
 # --- 1. AYARLAR ---
 UYGULAMA_ADI = "CEMRENİN MÜZİK KUTUSU"
@@ -14,35 +13,7 @@ UYGULAMA_SIFRESI = "1234"
 
 st.set_page_config(page_title=UYGULAMA_ADI, page_icon="🦅", layout="centered")
 
-# Google Drive'dan dosya listesini çeken fonksiyon
-@st.cache_data(ttl=600)
-def get_drive_files(folder_id):
-    url = f"https://www.googleapis.com/drive/v3/files?q='{folder_id}'+in+parents&fields=files(id, name)&key={API_KEY}"
-    response = requests.get(url)
-    return response.json().get('files', [])
-
-# Tasarım
-st.markdown("<style>.stApp {background-color: #000; color: #fff;}</style>", unsafe_allow_html=True)
-st.title(UYGULAMA_ADI)
-
-# Verileri Çek
-files = get_drive_files(MUZIK_FOLDER_ID)
-
-if files:
-    selected_file = st.selectbox("Bir şarkı seçin:", files, format_func=lambda x: x['name'])
-    
-    if selected_file:
-        # HIZLI YÖNTEM: Doğrudan Link Oluşturma
-        # Bu link tarayıcının dosyayı doğrudan çekmesini sağlar
-        file_id = selected_file['id']
-        direct_link = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={API_KEY}"
-        
-        st.subheader(f"Şu an çalıyor: {selected_file['name']}")
-        st.audio(direct_link) # Base64 kullanmadan direkt link ile oynatır
-else:
-    st.warning("Klasörde dosya bulunamadı veya API hatası.")
-
-# --- 2. CSS TASARIMI (Parantez hataları düzeltildi) ---
+# --- 2. CSS TASARIMI ---
 st.markdown(f"""
 <style>
     .stApp {{
@@ -87,17 +58,9 @@ if not st.session_state.auth:
 @st.cache_data(ttl=600)
 def get_files(f_id):
     try:
-        url = f"https://www.googleapis.com/drive/v3/files?q='{{f_id}}'+in+parents&fields=files(id, name)&key={API_KEY}"
-        return requests.get(url.format(f_id=f_id)).json().get('files', [])
+        url = f"https://www.googleapis.com/drive/v3/files?q='{f_id}'+in+parents&fields=files(id, name)&key={API_KEY}"
+        return requests.get(url).json().get('files', [])
     except: return []
-
-# Dosyayı indirip Base64 formatına çeviren sihirli fonksiyon (Engelleri bu aşar)
-def get_audio_base64(file_id):
-    try:
-        url = f"https://www.googleapis.com/drive/v3/files/{{file_id}}?alt=media&key={API_KEY}"
-        res = requests.get(url.format(file_id=file_id))
-        return base64.b64encode(res.content).decode()
-    except: return None
 
 songs = sorted([f for f in get_files(MUZIK_FOLDER_ID) if f['name'].lower().endswith(('.mp3', '.m4a'))], key=lambda x: x['name'])
 photos = get_files(FOTO_FOLDER_ID)
@@ -118,7 +81,7 @@ for s in filtered:
             st.session_state.idx = songs.index(s)
             st.rerun()
 
-# --- 6. GÜÇLÜ SIDEBAR OYNATICI ---
+# --- 6. GÜÇLÜ SIDEBAR OYNATICI (Hızlandırılmış) ---
 if songs:
     cur = songs[st.session_state.idx]
     cur_clean = cur['name'].split('.')[0]
@@ -127,25 +90,17 @@ if songs:
         st.markdown("### 🦅 Şimdi Çalıyor")
         st.info(f"**{cur_clean}**")
         
-        # Görsel
+        # Görsel Bulma
         match = next((p for p in photos if cur_clean.lower() in p['name'].lower()), None)
         p_id = match['id'] if match else (random.choice(photos)['id'] if photos else None)
         if p_id:
             img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
-            st.image(img_url, width='stretch')
+            st.image(img_url, use_container_width=True)
         
-        # --- KESİN ÇÖZÜM: BASE64 STREAM ---
-        with st.spinner("Şarkı hazırlanıyor..."):
-            audio_base64 = get_audio_base64(cur['id'])
-            if audio_base64:
-                audio_html = f"""
-                    <audio controls autoplay style="width: 100%;">
-                        <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                    </audio>
-                """
-                st.markdown(audio_html, unsafe_allow_html=True)
-            else:
-                st.error("Müzik yüklenemedi!")
+        # --- HIZLI OYNATICI (DOĞRUDAN LİNK) ---
+        # Base64 beklemeyi bitiren direkt bağlantı
+        audio_url = f"https://www.googleapis.com/drive/v3/files/{cur['id']}?alt=media&key={API_KEY}"
+        st.audio(audio_url)
         
         # Navigasyon
         c1, c2 = st.columns(2)
