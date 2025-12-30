@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import random
-import time
+import base64
 
 # --- 1. AYARLAR ---
 UYGULAMA_ADI = "CEMRENİN MÜZİK KUTUSU"
@@ -13,7 +13,7 @@ UYGULAMA_SIFRESI = "1234"
 
 st.set_page_config(page_title=UYGULAMA_ADI, page_icon="🦅", layout="centered")
 
-# --- 2. CSS TASARIMI ---
+# --- 2. CSS TASARIMI (Olduğu gibi korundu) ---
 st.markdown(f"""
 <style>
     .stApp {{
@@ -31,15 +31,11 @@ st.markdown(f"""
         color: white; font-weight: bold; padding: 10px;
         border: 1px solid #555;
     }}
-    .stButton>button:hover {{ 
-        background: #ffffff; color: black;
-    }}
+    .stButton>button:hover {{ background: #ffffff; color: black; }}
     .song-card {{
         background: rgba(255, 255, 255, 0.03); border-radius: 15px;
         padding: 15px; margin-bottom: 10px; border-left: 5px solid #ffffff;
     }}
-    /* Mobil için audio player genişliği */
-    audio {{ width: 100%; height: 45px; margin-top: 10px; border-radius: 10px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,13 +52,22 @@ if not st.session_state.auth:
             st.rerun()
     st.stop()
 
-# --- 4. VERİ ÇEKME FONKSİYONLARI ---
+# --- 4. VERİ ÇEKME VE SES DÖNÜŞTÜRME ---
 @st.cache_data(ttl=600)
 def get_files(f_id):
     try:
         url = f"https://www.googleapis.com/drive/v3/files?q='{f_id}'+in+parents&fields=files(id, name)&key={API_KEY}"
         return requests.get(url).json().get('files', [])
     except: return []
+
+# Ses dosyasını takılmadan çalması için güvenli formata çevirir
+@st.cache_resource
+def get_audio_base64(file_id):
+    try:
+        url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={API_KEY}"
+        audio_data = requests.get(url).content
+        return base64.b64encode(audio_data).decode()
+    except: return None
 
 songs = sorted([f for f in get_files(MUZIK_FOLDER_ID) if f['name'].lower().endswith(('.mp3', '.m4a'))], key=lambda x: x['name'])
 photos = get_files(FOTO_FOLDER_ID)
@@ -83,7 +88,7 @@ for s in filtered:
             st.session_state.idx = songs.index(s)
             st.rerun()
 
-# --- 6. MOBİL UYUMLU OYNATICI ---
+# --- 6. OYNATICI ---
 if songs:
     cur = songs[st.session_state.idx]
     cur_clean = cur['name'].split('.')[0]
@@ -98,11 +103,16 @@ if songs:
         img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
         st.image(img_url, use_container_width=True)
     
-    # Mobil ve Masaüstü için en garantili yöntem (HTML5 Player)
-    audio_url = f"https://www.googleapis.com/drive/v3/files/{cur['id']}?alt=media&key={API_KEY}"
-    st.markdown(f'<audio controls><source src="{audio_url}" type="audio/mpeg">Tarayıcınız desteklemiyor.</audio>', unsafe_allow_html=True)
+    # SES OYNATMA (En sağlam yöntem)
+    with st.spinner("Şarkı yükleniyor..."):
+        audio_base64 = get_audio_base64(cur['id'])
+        if audio_base64:
+            audio_html = f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3"></audio>'
+            st.markdown(audio_html, unsafe_allow_html=True)
+        else:
+            st.error("Ses dosyası yüklenemedi. Lütfen bağlantınızı kontrol edin.")
     
-    # Navigasyon Butonları
+    # Navigasyon
     c1, c2 = st.columns(2)
     with c1:
         if st.button("⏮️ Geri"):
