@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import random
+import time
 import base64
 
 # --- 1. AYARLAR ---
@@ -13,7 +14,7 @@ UYGULAMA_SIFRESI = "1234"
 
 st.set_page_config(page_title=UYGULAMA_ADI, page_icon="🦅", layout="centered")
 
-# --- 2. CSS TASARIMI (Olduğu gibi korundu) ---
+# --- 2. CSS TASARIMI (Parantez hataları düzeltildi) ---
 st.markdown(f"""
 <style>
     .stApp {{
@@ -31,7 +32,9 @@ st.markdown(f"""
         color: white; font-weight: bold; padding: 10px;
         border: 1px solid #555;
     }}
-    .stButton>button:hover {{ background: #ffffff; color: black; }}
+    .stButton>button:hover {{ 
+        background: #ffffff; color: black;
+    }}
     .song-card {{
         background: rgba(255, 255, 255, 0.03); border-radius: 15px;
         padding: 15px; margin-bottom: 10px; border-left: 5px solid #ffffff;
@@ -52,7 +55,7 @@ if not st.session_state.auth:
             st.rerun()
     st.stop()
 
-# --- 4. VERİ ÇEKME VE SES DÖNÜŞTÜRME ---
+# --- 4. VERİ ÇEKME FONKSİYONLARI ---
 @st.cache_data(ttl=600)
 def get_files(f_id):
     try:
@@ -60,7 +63,7 @@ def get_files(f_id):
         return requests.get(url).json().get('files', [])
     except: return []
 
-# Ses dosyasını takılmadan çalması için güvenli formata çevirir
+# Ses dosyasını PC/Telefon ayırmadan çalması için Base64'e çevirir
 @st.cache_resource
 def get_audio_base64(file_id):
     try:
@@ -88,39 +91,44 @@ for s in filtered:
             st.session_state.idx = songs.index(s)
             st.rerun()
 
-# --- 6. OYNATICI ---
+# --- 6. GÜÇLÜ OYNATICI (PC ve Mobil İçin Kesin Çözüm) ---
 if songs:
     cur = songs[st.session_state.idx]
     cur_clean = cur['name'].split('.')[0]
     
-    st.markdown("---")
-    st.subheader(f"🦅 Şimdi Çalıyor: {cur_clean}")
-    
-    # Görsel Bulma
-    match = next((p for p in photos if cur_clean.lower() in p['name'].lower()), None)
-    p_id = match['id'] if match else (random.choice(photos)['id'] if photos else None)
-    if p_id:
-        img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
-        st.image(img_url, use_container_width=True)
-    
-    # SES OYNATMA (En sağlam yöntem)
-    with st.spinner("Şarkı yükleniyor..."):
-        audio_base64 = get_audio_base64(cur['id'])
-        if audio_base64:
-            audio_html = f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3"></audio>'
-            st.markdown(audio_html, unsafe_allow_html=True)
-        else:
-            st.error("Ses dosyası yüklenemedi. Lütfen bağlantınızı kontrol edin.")
-    
-    # Navigasyon
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("⏮️ Geri"):
-            st.session_state.idx = (st.session_state.idx - 1) % len(songs)
-            st.rerun()
-    with c2:
-        if st.button("İleri ⏭️"):
-            st.session_state.idx = (st.session_state.idx + 1) % len(songs)
-            st.rerun()
+    with st.sidebar:
+        st.markdown("### 🦅 Şimdi Çalıyor")
+        st.info(f"**{cur_clean}**")
+        
+        # Görsel
+        match = next((p for p in photos if cur_clean.lower() in p['name'].lower()), None)
+        p_id = match['id'] if match else (random.choice(photos)['id'] if photos else None)
+        if p_id:
+            img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
+            st.image(img_url, width='stretch') # use_container_width hatası burada düzeltildi
+        
+        # --- KESİN ÇÖZÜM: BASE64 STREAM ---
+        with st.spinner("Şarkı hazırlanıyor..."):
+            audio_base64 = get_audio_base64(cur['id'])
+            if audio_base64:
+                audio_html = f"""
+                    <audio controls autoplay style="width: 100%;">
+                        <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+                    </audio>
+                """
+                st.markdown(audio_html, unsafe_allow_html=True)
+            else:
+                st.error("Müzik yüklenemedi!")
+        
+        # Navigasyon
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("⏮️ Geri"):
+                st.session_state.idx = (st.session_state.idx - 1) % len(songs)
+                st.rerun()
+        with c2:
+            if st.button("İleri ⏭️"):
+                st.session_state.idx = (st.session_state.idx + 1) % len(songs)
+                st.rerun()
 
 st.markdown("<br><hr><center><small>Beşiktaş Temalı Müzik Kutusu</small></center>", unsafe_allow_html=True)
