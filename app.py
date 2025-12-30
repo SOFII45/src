@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import random
-import time
 
 # --- 1. AYARLAR ---
 UYGULAMA_ADI = "CEMRENİN MÜZİK KUTUSU"
@@ -13,30 +12,31 @@ UYGULAMA_SIFRESI = "1234"
 
 st.set_page_config(page_title=UYGULAMA_ADI, page_icon="🦅", layout="centered")
 
-# --- 2. CSS TASARIMI ---
+# --- 2. CSS TASARIMI (Mobil Uyumlu) ---
 st.markdown(f"""
 <style>
     .stApp {{
         background: linear-gradient(135deg, #000000, #1a1a1a, #050505);
         color: white;
     }}
-    .logo-container {{ text-align: center; padding: 20px; }}
+    .logo-container {{ text-align: center; padding: 10px; }}
     .logo-img {{ 
         border-radius: 50%; border: 3px solid #ffffff; 
-        width: 150px; height: 150px; object-fit: cover; 
+        width: 120px; height: 120px; object-fit: cover; 
     }}
     .stButton>button {{
-        width: 100%; border-radius: 30px; border: none;
-        background: linear-gradient(90deg, #000000, #444444); 
-        color: white; font-weight: bold; padding: 10px;
-        border: 1px solid #555;
+        width: 100%; border-radius: 20px; border: none;
+        background: linear-gradient(90deg, #111, #333); 
+        color: white; font-weight: bold; padding: 12px;
+        border: 1px solid #444;
+        font-size: 16px;
     }}
     .stButton>button:hover {{ 
         background: #ffffff; color: black;
     }}
     .song-card {{
-        background: rgba(255, 255, 255, 0.03); border-radius: 15px;
-        padding: 15px; margin-bottom: 10px; border-left: 5px solid #ffffff;
+        background: rgba(255, 255, 255, 0.05); border-radius: 12px;
+        padding: 12px; margin-bottom: 8px; border-left: 4px solid #ffffff;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -45,72 +45,84 @@ st.markdown(f"""
 if "auth" not in st.session_state: st.session_state.auth = False
 if "idx" not in st.session_state: st.session_state.idx = 0
 
+# Giriş Ekranı
 if not st.session_state.auth:
     st.markdown(f'<div class="logo-container"><img class="logo-img" src="{LOGO_URL}"></div>', unsafe_allow_html=True)
     sifre = st.text_input("Şifre", type="password")
-    if st.button("Başlat"):
+    if st.button("🦅 Giriş Yap"):
         if sifre == UYGULAMA_SIFRESI:
             st.session_state.auth = True
             st.rerun()
+        else:
+            st.error("Hatalı Şifre!")
     st.stop()
 
-# --- 4. VERİ ÇEKME FONKSİYONLARI ---
+# --- 4. VERİ ÇEKME ---
 @st.cache_data(ttl=600)
 def get_files(f_id):
     try:
         url = f"https://www.googleapis.com/drive/v3/files?q='{f_id}'+in+parents&fields=files(id, name)&key={API_KEY}"
-        return requests.get(url).json().get('files', [])
-    except: return []
+        res = requests.get(url).json()
+        return res.get('files', [])
+    except:
+        return []
 
 songs = sorted([f for f in get_files(MUZIK_FOLDER_ID) if f['name'].lower().endswith(('.mp3', '.m4a'))], key=lambda x: x['name'])
 photos = get_files(FOTO_FOLDER_ID)
 
 # --- 5. ANA EKRAN ---
 st.markdown(f'<div class="logo-container"><img class="logo-img" src="{LOGO_URL}"></div>', unsafe_allow_html=True)
-st.title(UYGULAMA_ADI)
+st.title("Kartal Müzik")
 
-search = st.text_input("🔍 Ara...", placeholder="Şarkı ismi...")
+search = st.text_input("🔍 Şarkı Ara...", placeholder="Bir parça ismi yaz...")
 filtered = [s for s in songs if search.lower() in s['name'].lower()]
 
+# Şarkı Listesi
 for s in filtered:
-    col_txt, col_btn = st.columns([5, 1])
+    col_txt, col_btn = st.columns([4, 1])
     with col_txt:
         st.markdown(f'<div class="song-card"><b>{s["name"].split(".")[0]}</b></div>', unsafe_allow_html=True)
     with col_btn:
-        if st.button("▶️", key=f"p_{s['id']}"):
+        if st.button("▶️", key=f"play_{s['id']}"):
             st.session_state.idx = songs.index(s)
             st.rerun()
 
-# --- 6. GÜÇLÜ SIDEBAR OYNATICI (Hızlandırılmış) ---
+# --- 6. OYNATICI (Mobil İçin Geliştirilmiş) ---
 if songs:
     cur = songs[st.session_state.idx]
     cur_clean = cur['name'].split('.')[0]
     
-    with st.sidebar:
-        st.markdown("### 🦅 Şimdi Çalıyor")
-        st.info(f"**{cur_clean}**")
-        
-        # Görsel Bulma
-        match = next((p for p in photos if cur_clean.lower() in p['name'].lower()), None)
-        p_id = match['id'] if match else (random.choice(photos)['id'] if photos else None)
-        if p_id:
-            img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
-            st.image(img_url, use_container_width=True)
-        
-        # --- HIZLI OYNATICI (DOĞRUDAN LİNK) ---
-        # Base64 beklemeyi bitiren direkt bağlantı
-        audio_url = f"https://www.googleapis.com/drive/v3/files/{cur['id']}?alt=media&key={API_KEY}"
-        st.audio(audio_url)
-        
-        # Navigasyon
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("⏮️ Geri"):
-                st.session_state.idx = (st.session_state.idx - 1) % len(songs)
-                st.rerun()
-        with c2:
-            if st.button("İleri ⏭️"):
-                st.session_state.idx = (st.session_state.idx + 1) % len(songs)
-                st.rerun()
+    st.markdown("---")
+    st.subheader(f"🎵 {cur_clean}")
+    
+    # Fotoğrafı Getir
+    match = next((p for p in photos if cur_clean.lower() in p['name'].lower()), None)
+    p_id = match['id'] if match else (random.choice(photos)['id'] if photos and len(photos)>0 else None)
+    
+    if p_id:
+        img_url = f"https://www.googleapis.com/drive/v3/files/{p_id}?alt=media&key={API_KEY}"
+        st.image(img_url, use_container_width=True)
 
-st.markdown("<br><hr><center><small>Beşiktaş Temalı Müzik Kutusu</small></center>", unsafe_allow_html=True)
+    # Ses Bağlantısı (Direct Link)
+    audio_url = f"https://www.googleapis.com/drive/v3/files/{cur['id']}?alt=media&key={API_KEY}"
+    
+    # TELEFONLAR İÇİN HTML5 PLAYER (Daha sağlam çalışır)
+    st.markdown(f"""
+        <audio controls autoplay style="width: 100%; margin-top: 10px;">
+            <source src="{audio_url}" type="audio/mpeg">
+            Tarayıcınız bu oynatıcıyı desteklemiyor.
+        </audio>
+    """, unsafe_allow_html=True)
+    
+    # Alt Navigasyon
+    nav1, nav2 = st.columns(2)
+    with nav1:
+        if st.button("⏮️ Önceki"):
+            st.session_state.idx = (st.session_state.idx - 1) % len(songs)
+            st.rerun()
+    with nav2:
+        if st.button("Sonraki ⏭️"):
+            st.session_state.idx = (st.session_state.idx + 1) % len(songs)
+            st.rerun()
+
+st.markdown("<br><center><small>🦅 Beşiktaş 1903 🦅</small></center>", unsafe_allow_html=True)
